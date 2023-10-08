@@ -1,0 +1,127 @@
+---
+title: "Final Project"
+author: "Spencer O'Neill"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+`Data Wrangling`
+```{r}
+load("DOC_baseFlow_weightedAvg_and_predictors.RData")
+data <- DOC_baseFlow_weightedAvg_and_predictors
+
+set.seed(1)
+
+n <- nrow(data)
+p <- sample(1:n)
+train = data[p[1:(n/2)], ]
+test = data[p[((n/2)+1):n], ]
+
+dep_ndx <- which(colnames(data) == 'meanDOC')
+
+for (v in 1:ncol(data)) {
+  if (v == dep_ndx) { next }
+  s <- sd(train[,v])
+  train[,v] <- train[,v] / s
+  test[,v] <- test[,v] / s
+}
+```
+
+`Backwards Model`
+```{r}
+meanDOC_lm = lm(meanDOC ~ ., data=train)
+full_step = step(meanDOC_lm, direction="backward", k=log(3052), trace=0)
+```
+
+`Forwards Model`
+```{r}
+small_model <- lm(meanDOC ~ 1, data=train)
+small_step = step(small_model, direction="forward", 
+                  scope = formula(meanDOC_lm), k=log(3052), trace=0)
+```
+
+`Backwards Predictions`
+```{r}
+predictions = predict(full_step, newdata = test)
+residuals = test$meanDOC - predictions
+
+SSR = sum(residuals ^ 2)
+mean_meanDOC = mean(test$meanDOC)
+SST = sum((test$meanDOC - mean_meanDOC)^2)
+r_squared_full = 1 - (SSR / SST)
+```
+
+`Forwards Predictions`
+```{r}
+predictions = predict(small_step, newdata = test)
+residuals = test$meanDOC - predictions
+
+SSR = sum(residuals ^ 2)
+mean_meanDOC = mean(test$meanDOC)
+SST = sum((test$meanDOC - mean_meanDOC)^2)
+r_squared_small = 1 - (SSR / SST)
+```
+
+`Plotting`
+
+```{r}
+avPlots2 <- function(model, terms=~., intercept=FALSE, layout=NULL, ask, 
+                     main, xlab, ...){
+    terms <- if(is.character(terms)) paste("~",terms) else terms
+    vform <- update(formula(model),terms)
+    if(any(is.na(match(all.vars(vform), all.vars(formula(model))))))
+        stop("Only predictors in the formula can be plotted.")
+    terms.model <- attr(attr(model.frame(model), "terms"), "term.labels")
+    terms.vform <- attr(terms(vform), "term.labels")
+    terms.used <- match(terms.vform, terms.model)
+    mm <- model.matrix(model) 
+    model.names <- attributes(mm)$dimnames[[2]]
+    model.assign <- attributes(mm)$assign
+    good <- model.names[!is.na(match(model.assign, terms.used))]
+    if (intercept) good <- c("(Intercept)", good)
+    nt <- length(good)
+    if (nt == 0) stop("No plots specified")
+    if (missing(main)) main <- if (nt == 1) paste("Added-Variable Plot:", good) else "Added-Variable Plots"
+    if (nt == 0) stop("No plots specified")
+    if (nt > 1 & (is.null(layout) || is.numeric(layout))) {
+        if(is.null(layout)){
+            layout <- switch(min(nt, 9), c(1, 1), c(1, 2), c(2, 2), c(2, 2), 
+                             c(3, 2), c(3, 2), c(3, 3), c(3, 3), c(3, 3))
+        }
+        ask <- if(missing(ask) || is.null(ask)) prod(layout)<nt else ask
+        op <- par(mfrow=layout, ask=ask, no.readonly=TRUE, 
+                  oma=c(0, 0, 1.5, 0), mar=c(5, 4, 1, 2) + .1)
+        on.exit(par(op))
+    }
+    if (missing(xlab)) xlab <- paste(good, "| others")
+    if (length(xlab) == 1L) xlab <- rep(xlab, length(good))
+    if (length(xlab) > length(good))
+      warning("'xlab' not length 1 or the number of model names, truncating")
+    res <- as.list(NULL)
+    for (i in seq_along(good)) {
+      term <- good[[i]]
+      res[[term]] <- avPlot(model, term, main="", xlab=xlab[[i]], ...)
+    }
+    mtext(side=3,outer=TRUE,main, cex=1.2)
+    invisible(res)
+}
+
+library(car)
+```
+
+```{r}
+#suppressWarnings(library(car))
+labs <- c(
+  "Max Temp Base Flow",
+  "Soil A Fraction",
+  "Soil B Fraction",
+  "Mean Elevation",
+  "No. of Waste Water Point Sources"
+)
+avPlots2(full_step, xlab=labs, ylab="Mean DOC", main="Backwards Regression Variable Plots", id=FALSE)
+```
+

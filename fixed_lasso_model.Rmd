@@ -1,0 +1,114 @@
+---
+title: "Group Final Project (2A)"
+output: pdf_document
+date: "2023-05-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Authors
+Zach Burgos, Cheyenne Garza, Sumanth Kolli, Spencer O'Neil, Kamil Tomasewicz
+
+## Table of Contents
+* Section 1 - Abstract
+* Section 2 - Introduction
+* Section 3 - Methods
+  * LASSO Regression
+* Section 4 - Results
+* Section 5 - Discussion 
+
+## Section 1 - Abstract
+
+## Section 2 - Introduction 
+
+## Section 3 - Methods 
+
+```{r, echo = TRUE, include = FALSE}
+#IMPORTING LIBRARIES
+library(glmnet)
+
+#LOADING AND RENAMING DATA SET
+load("DOC_baseFlow_weightedAvg_and_predictors.RData")
+data <- DOC_baseFlow_weightedAvg_and_predictors
+```
+
+```{r}
+rsqr <- function(prediction, observed){
+  residuals <- observed - prediction
+  SSR <- sum(residuals ** 2)
+  mean_doc <- mean(observed)
+  SST <- sum((observed - mean_doc) ** 2)
+  rsqr <- 1 - (SSR/SST)
+}
+```
+
+
+Given that the aim of regression based models is to examine the relationship between dependent and independent variables, an exploratory analysis of this relationship would prove to be practical. By exploring how various predictor variables may or may not affect the response variable, we are able to make informed conclusions upon an analysis of the results which our LASSO regression model will bring. 
+
+The data set being scrutinized was collected with an aim of monitoring the impact mountain pine beetles may have on the concentration of dissolved organic carbon. As a result, this puts `meanDOC` as being our response variable with the remaining thirty one variables being predictor variables. In the nature of LASSO regression, all variables will be employed when building this model and will instead penalize those variables with large coefficient values. Following this assumption, we hope this requires some coefficients to be zero implying the ability to remove the variable from consideration. Before implementing the model, first the data set must be split into training and testing data sets for the purpose of being able to validate the created model and get an unbiased view regarding our model's performance. 
+
+```{r, echo = TRUE, include = FALSE}
+#SPLITTING INTO TEST AND TRAINING DATA
+set.seed(1) #makes random numbers reproducable 
+n <- nrow(data) #number of observations in the data set
+p <- sample(1:n) #selects a sample of numbers from 1 - number of rows in data
+
+train <- data[p[1:(n/2)], ] #half of data goes into train set
+test <- data[p[((n/2)+1):n], ] #remainder of data goes into test set
+
+#STANDARDIZE DATA TO ENSURE EQUAL BIAS FROM ALL INDEPENDENT VARIABLES
+dep_ndx <- which(colnames(data) == 'meanDOC') #dependent/response variable
+
+for (v in 1:ncol(data)) { #for every variable in data
+  if (v == dep_ndx) { next } #skips over response variable
+  s <- sd(train[, v]) #finds standard deviation of every var in train data
+  train[, v] <- train[, v] / s #divides by std of every var in train
+  test[, v]  <- test[, v] / s #divides by std of ever var in test data
+}
+
+#IMPLEMENT LASSO REGRESSION
+#matrix of standardized training predictor variables
+xtrainstd <- as.matrix(train[, -dep_ndx]) 
+#matrix of standardized testing predictor variables
+xteststd <- as.matrix(test[, -dep_ndx]) 
+#training response variable
+ytrain <- train$meanDOC
+
+lasso_fit <- cv.glmnet(xtrainstd, ytrain) #fitting LASSO model
+best_lambda <- lasso_fit$lambda.min #find optimal lambda value minimizing mse
+best_model <- glmnet(xtrainstd, ytrain, lambda = best_lambda) #model w best lambda
+
+y_train_predict <- predict(best_model, xtrainstd) #train predictions
+y_test_predict <- predict(best_model, xteststd) #test predictions
+
+coef(best_model)
+#R-SQUARED VALUES
+rsqrtrain <- rsqr(y_train_predict, train$meanDOC)
+rsqrtest <- rsqr(y_test_predict, test$meanDOC)
+```
+
+```{r, echo = FALSE}
+#VISUALIZATION 
+plot(lasso_fit) #compares MSE and log (lambda) values
+plot(ytrain, residuals, pch=19, col=rgb(0, 0, 0, 0.1), 
+     xlab = "Mean of DOC", ylab="Residual",
+     main = "Residuals of LASSO fit") 
+
+#could do graph comparing testing, training, & normal r-squared values
+#can make table comparing r-squared values, RMSE, and MAE values
+#maybe a confusion matrix (test/training/or normal data)
+#could have another graph comparing more residuals
+
+#requirements from project description: 
+  #make sure figures have labels for the axes and all symbols identified
+  #use caption instead of a title
+    #can be used to give more details about what is in the figure
+      #example “The solid lines are XXX, and the dashed lines are YYY but are only based on the location ZZZ.”
+```
+INTERPRETATION AND ANALYSIS
+
+## Section 4 - Results 
+
+## Section 5 - Discussion 
